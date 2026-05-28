@@ -1,0 +1,12 @@
+sales_rules:
+  sale_amount_min: 1
+  quantity_min: 1
+
+customer_rules:
+  valid_email_required: true
+
+duplicate_rules:
+  duplicate_order_check: true
+
+date_rules:
+  future_dates_not_allowed: true

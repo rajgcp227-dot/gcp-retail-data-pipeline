@@ -1,0 +1,11 @@
+store_id,store_name,city,state,region,created_date,load_type
+STORED20260504001,Mander LLC,Navi Mumbai,Odisha,North,2026-05-04,DELTA
+STORED20260504002,Nadig-Bumb,Ichalkaranji,Uttar Pradesh,North,2026-05-04,DELTA
+STORED20260504003,Chaudhari-Aurora,Agartala,West Bengal,West,2026-05-04,DELTA
+STORED20260504004,Bala PLC,Kamarhati,Mizoram,West,2026-05-04,DELTA
+STORED20260504005,"Arya, Mahajan and Dutta",Kirari Suleman Nagar,Tripura,East,2026-05-04,DELTA
+STORED20260504006,"Rao, Chhabra and Barad",Gudivada,Nagaland,South,2026-05-04,DELTA
+STORED20260504007,"Sandhu, Narayan and Buch",Salem,Bihar,East,2026-05-04,DELTA
+STORED20260504008,"Tata, Bains and Virk",Kadapa,Telangana,South,2026-05-04,DELTA
+STORED20260504009,Nath Group,Bhimavaram,Sikkim,South,2026-05-04,DELTA
+STORED20260504010,Sami Group,Bhusawal,Karnataka,East,2026-05-04,DELTA

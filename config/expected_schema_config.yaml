@@ -1,0 +1,31 @@
+customers:
+  mandatory_columns:
+    - customer_id
+    - customer_name
+    - email
+    - city
+    - created_date
+
+products:
+  mandatory_columns:
+    - product_id
+    - product_name
+    - category
+    - price
+
+stores:
+  mandatory_columns:
+    - store_id
+    - store_name
+    - city
+    - state
+
+sales:
+  mandatory_columns:
+    - order_id
+    - customer_id
+    - product_id
+    - store_id
+    - quantity
+    - sale_amount
+    - sale_date

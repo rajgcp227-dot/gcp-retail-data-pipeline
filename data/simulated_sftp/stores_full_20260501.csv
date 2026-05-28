@@ -1,0 +1,101 @@
+store_id,store_name,city,state,region,created_date,load_type
+,Sarna PLC,Nanded,Telangana,East,2026-05-01,FULL
+STORE0002,Mohan-Nayar,Mango,Mizoram,UNKNOWN_REGION,2026-05-01,FULL
+STORE0003,Hayre-Acharya,Muzaffarnagar,Punjab,North,2026-05-01,FULL
+STORE0004,"Taneja, Tella and Baral",Baranagar,Maharashtra,West,2026-05-01,FULL
+STORE0005,Mohanty-Chahal,Hosur,Rajasthan,South,2026-05-01,FULL
+STORE0006,"Modi, Vaidya and Sur",Madanapalle,Tamil Nadu,East,2026-05-01,FULL
+STORE0007,Gokhale Inc,Amaravati,Chhattisgarh,East,2026-05-01,FULL
+STORE0008,Radhakrishnan PLC,Orai,Meghalaya,West,2026-05-01,FULL
+STORE0009,Jhaveri Group,Serampore,Telangana,East,2026-05-01,FULL
+STORE0010,Wali-Pillai,Khammam,Meghalaya,North,2026-05-01,FULL
+STORE0011,"Raju, Nair and Kala",Adoni,Chhattisgarh,West,2026-05-01,FULL
+STORE0012,Sahota-Mani,Surat,Mizoram,North,2026-05-01,FULL
+STORE0013,Kapadia and Sons,Malegaon,Kerala,South,2026-05-01,FULL
+STORE0014,Prabhakar-Bahl,Aurangabad,Chhattisgarh,East,2026-05-01,FULL
+STORE0015,Sama Group,Mathura,Tamil Nadu,East,2026-05-01,FULL
+STORE0016,Aggarwal-Mand,Uluberia,Telangana,North,2026-05-01,FULL
+STORE0017,"Sawhney, Kata and Chaudhari",Jehanabad,Chhattisgarh,West,2026-05-01,FULL
+STORE0018,"Samra, Sami and Goel",Nizamabad,Meghalaya,West,2026-05-01,FULL
+STORE0019,Sangha-Agate,Miryalaguda,Chhattisgarh,East,2026-05-01,FULL
+STORE0020,"Thakkar, Bhargava and Srivastava",Ghaziabad,Arunachal Pradesh,North,2026-05-01,FULL
+STORE0021,Kumer LLC,Darbhanga,Bihar,South,2026-05-01,FULL
+STORE0022,"Sharaf, Khatri and Ramachandran",Madanapalle,Haryana,North,2026-05-01,FULL
+STORE0023,"Kapur, Jain and Korpal",Thiruvananthapuram,Mizoram,West,2026-05-01,FULL
+STORE0024,Sanghvi-Vala,Suryapet,Telangana,East,2026-05-01,FULL
+STORE0025,Vig-Wagle,Hapur,Mizoram,East,2026-05-01,FULL
+STORE0026,Sem and Sons,Siwan,Bihar,East,2026-05-01,FULL
+STORE0027,Pall-Gole,Kulti,Karnataka,South,2026-05-01,FULL
+STORE0028,Swaminathan Ltd,Nangloi Jat,Nagaland,South,2026-05-01,FULL
+STORE0029,Kaul-Parsa,Raipur,Odisha,West,2026-05-01,FULL
+STORE0030,"Virk, Bakshi and Puri",Kavali,Madhya Pradesh,North,2026-05-01,FULL
+STORE0031,Hegde and Sons,Belgaum,Punjab,North,2026-05-01,FULL
+STORE0032,"Panchal, Bhandari and Rana",Jamnagar,Telangana,North,2026-05-01,FULL
+STORE0033,Rege Ltd,Udaipur,Nagaland,South,2026-05-01,FULL
+STORE0034,Bhalla Group,Gandhidham,Manipur,East,2026-05-01,FULL
+STORE0035,"Sawhney, Yohannan and Sachdev",Berhampur,Tamil Nadu,West,2026-05-01,FULL
+STORE0036,"Subramaniam, Borra and Walia",Narasaraopet,Arunachal Pradesh,West,2026-05-01,FULL
+STORE0037,Sarma-Lanka,Orai,Uttar Pradesh,South,2026-05-01,FULL
+STORE0038,"Kari, Kalla and Bali",Thrissur,Tamil Nadu,South,2026-05-01,FULL
+STORE0039,Mand-Basak,Sangli-Miraj & Kupwad,Himachal Pradesh,East,2026-05-01,FULL
+STORE0040,Rama Inc,Noida,Haryana,East,2026-05-01,FULL
+STORE0041,Mammen PLC,Panchkula,Gujarat,South,2026-05-01,FULL
+STORE0042,Palla-Chopra,Medininagar,Bihar,West,2026-05-01,FULL
+STORE0043,"Yadav, Rege and Ramaswamy",Rajpur Sonarpur,Chhattisgarh,East,2026-05-01,FULL
+STORE0044,"Mitra, Bail and Ratta",Bharatpur,Meghalaya,East,2026-05-01,FULL
+STORE0045,Lalla Group,Kurnool,Punjab,West,2026-05-01,FULL
+STORE0046,"Pall, Soni and Din",Nagaon,Karnataka,East,2026-05-01,FULL
+STORE0047,Apte Group,Begusarai,Sikkim,West,2026-05-01,FULL
+STORE0048,"Mistry, Karan and Trivedi",Loni,Tripura,North,2026-05-01,FULL
+STORE0049,Bala PLC,Raebareli,Sikkim,East,2026-05-01,FULL
+STORE0050,"Dyal, Loyal and Munshi",Khammam,Assam,East,2026-05-01,FULL
+STORE0051,Balakrishnan-Mukherjee,Rajahmundry,Kerala,North,2026-05-01,FULL
+STORE0052,"Sura, Prasad and Mahajan",Baranagar,Uttar Pradesh,West,2026-05-01,FULL
+STORE0053,Keer-Raj,Tadipatri,Odisha,East,2026-05-01,FULL
+STORE0054,Chaudhry-Bhat,Panchkula,Telangana,North,2026-05-01,FULL
+STORE0055,"Saxena, Shan and Dhar",Nanded,Chhattisgarh,West,2026-05-01,FULL
+STORE0056,"Sanghvi, Mohanty and Radhakrishnan",North Dumdum,Haryana,East,2026-05-01,FULL
+STORE0057,Bandi Inc,Mehsana,Andhra Pradesh,South,2026-05-01,FULL
+STORE0058,Sharma LLC,Fatehpur,Uttarakhand,North,2026-05-01,FULL
+STORE0059,Singhal-Sarkar,Siwan,Tamil Nadu,West,2026-05-01,FULL
+STORE0060,Nagar Inc,Secunderabad,Haryana,South,2026-05-01,FULL
+STORE0061,"Purohit, Anne and Dada",Hazaribagh,West Bengal,West,2026-05-01,FULL
+STORE0062,Dubey Inc,Tiruvottiyur,West Bengal,South,2026-05-01,FULL
+STORE0063,Bhagat Inc,Pudukkottai,West Bengal,South,2026-05-01,FULL
+STORE0064,"Buch, Pall and Pau",Jehanabad,Haryana,North,2026-05-01,FULL
+STORE0065,"Dugar, Dhawan and Kuruvilla",Imphal,Kerala,North,2026-05-01,FULL
+STORE0066,Nigam-Goswami,Bokaro,Chhattisgarh,South,2026-05-01,FULL
+STORE0067,Mitter Ltd,Parbhani,Tripura,North,2026-05-01,FULL
+STORE0068,Gupta PLC,Guwahati,Manipur,West,2026-05-01,FULL
+STORE0069,Issac-Joshi,Mathura,Nagaland,East,2026-05-01,FULL
+STORE0070,Nadig Group,Dharmavaram,Arunachal Pradesh,West,2026-05-01,FULL
+STORE0071,Arya-Palla,Khora ,Kerala,South,2026-05-01,FULL
+STORE0072,"Bhattacharyya, Arya and Sankar",Bulandshahr,Bihar,West,2026-05-01,FULL
+STORE0073,"Bhatt, Dey and Venkataraman",Jalna,Arunachal Pradesh,South,2026-05-01,FULL
+STORE0074,"Thakkar, Chowdhury and Bhatt",Jhansi,Andhra Pradesh,West,2026-05-01,FULL
+STORE0075,"Prashad, Karnik and Wali",Coimbatore,Himachal Pradesh,West,2026-05-01,FULL
+STORE0076,Deo-Sastry,Bhavnagar,Mizoram,North,2026-05-01,FULL
+STORE0077,"Keer, Amble and Grover",Pimpri-Chinchwad,Kerala,South,2026-05-01,FULL
+STORE0078,Borde PLC,Nashik,Karnataka,South,2026-05-01,FULL
+STORE0079,Ben-Gupta,Aurangabad,Bihar,East,2026-05-01,FULL
+STORE0080,Rege Inc,Bongaigaon,Kerala,West,2026-05-01,FULL
+STORE0081,"Wable, Sama and Nanda",Pudukkottai,Nagaland,West,2026-05-01,FULL
+STORE0082,Magar LLC,Hindupur,West Bengal,East,2026-05-01,FULL
+STORE0083,Sangha LLC,Jaunpur,Assam,South,2026-05-01,FULL
+STORE0084,"Grover, Tata and Behl",Nizamabad,Mizoram,West,2026-05-01,FULL
+STORE0085,Mohan-Wagle,Vadodara,Karnataka,East,2026-05-01,FULL
+STORE0086,Rai-Dua,Bhopal,West Bengal,East,2026-05-01,FULL
+STORE0087,"Batta, Prabhu and Ramanathan",Bhimavaram,Rajasthan,East,2026-05-01,FULL
+STORE0088,Magar-Raman,Karimnagar,Andhra Pradesh,West,2026-05-01,FULL
+STORE0089,Devi Ltd,Thanjavur,Arunachal Pradesh,South,2026-05-01,FULL
+STORE0090,Rana-Prasad,Bhiwani,Uttarakhand,South,2026-05-01,FULL
+STORE0091,Parsa Inc,Tadipatri,Andhra Pradesh,East,2026-05-01,FULL
+STORE0092,"Patel, Pradhan and Shankar",Ozhukarai,Meghalaya,East,2026-05-01,FULL
+STORE0093,"Kala, Soni and Kothari",Madanapalle,Jharkhand,South,2026-05-01,FULL
+STORE0094,Lata-Kara,Saharanpur,Odisha,East,2026-05-01,FULL
+STORE0095,"Barman, Halder and Nanda",Gwalior,Tamil Nadu,East,2026-05-01,FULL
+STORE0096,"Ram, Badami and Dash",Durgapur,Manipur,South,2026-05-01,FULL
+STORE0097,Magar-Tank,Aizawl,Goa,West,2026-05-01,FULL
+STORE0098,Kari-Ganguly,Salem,Assam,East,2026-05-01,FULL
+STORE0099,"Bawa, De and Sarkar",Guntur,Haryana,West,2026-05-01,FULL
+STORE0100,Sengupta-Handa,Muzaffarnagar,West Bengal,East,2026-05-01,FULL

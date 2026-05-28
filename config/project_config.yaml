@@ -1,0 +1,23 @@
+project_name: gcp-retail-data-pipeline
+
+source_data_path: data/simulated_sftp
+
+full_load_date: 20260501
+
+incremental_dates:
+  - 20260502
+  - 20260503
+  - 20260504
+  - 20260505
+  - 20260506
+
+record_counts:
+  customers_full: 5000
+  products_full: 1000
+  stores_full: 100
+  sales_full: 50000
+
+  customers_delta: 300
+  products_delta: 100
+  stores_delta: 10
+  sales_delta: 5000
