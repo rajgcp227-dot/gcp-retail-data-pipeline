@@ -1,0 +1,7 @@
+pandas
+faker
+pyyaml
+google-cloud-storage
+google-cloud-bigquery
+python-dotenv
+
