@@ -16,8 +16,17 @@ record_counts:
   products_full: 1000
   stores_full: 100
   sales_full: 50000
-
   customers_delta: 300
   products_delta: 100
   stores_delta: 10
   sales_delta: 5000
+
+gcp:
+  project_id: still-resource-497715-g5
+  region: asia-south1
+
+gcs:
+  landing_bucket: retail-landing-dev-raj1779989813
+  validated_bucket: retail-validated-dev-raj1779989813
+  rejected_bucket: retail-rejected-dev-raj1779989813
+  archive_bucket: retail-archive-dev-raj1779989813

@@ -9,3 +9,5 @@ data/rejected/
 data/archive/
 audit/
 
+keys/*.json
+
