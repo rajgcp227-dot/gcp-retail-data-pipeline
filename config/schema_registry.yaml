@@ -1,0 +1,48 @@
+customers:
+  allow_new_columns: true
+  mandatory_columns:
+    - customer_id
+    - customer_name
+    - email
+    - city
+    - state
+    - created_date
+    - load_type
+
+products:
+  allow_new_columns: true
+  mandatory_columns:
+    - product_id
+    - product_name
+    - category
+    - brand
+    - price
+    - created_date
+    - load_type
+
+stores:
+  allow_new_columns: true
+  mandatory_columns:
+    - store_id
+    - store_name
+    - city
+    - state
+    - region
+    - created_date
+    - load_type
+
+sales:
+  allow_new_columns: true
+  mandatory_columns:
+    - order_id
+    - customer_id
+    - product_id
+    - store_id
+    - quantity
+    - unit_price
+    - discount_amount
+    - tax_amount
+    - sale_amount
+    - sale_date
+    - payment_method
+    - load_type
