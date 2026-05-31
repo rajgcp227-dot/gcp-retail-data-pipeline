@@ -1,27 +1,25 @@
-step 1 ----------------
-
-
-
--- Step 1: Create sales DQ result table
-
 CREATE OR REPLACE TABLE
 `still-resource-497715-g5.retail_audit_records.sales_dq_results`
 AS
+
 WITH valid_customers AS (
   SELECT DISTINCT customer_id
   FROM `still-resource-497715-g5.retail_staging.customers_raw`
   WHERE customer_id IS NOT NULL
 ),
+
 valid_products AS (
   SELECT DISTINCT product_id
   FROM `still-resource-497715-g5.retail_staging.products_raw`
   WHERE product_id IS NOT NULL
 ),
+
 valid_stores AS (
   SELECT DISTINCT store_id
   FROM `still-resource-497715-g5.retail_staging.stores_raw`
   WHERE store_id IS NOT NULL
 ),
+
 base AS (
   SELECT
     s.*,
@@ -34,8 +32,10 @@ base AS (
     ) rn
   FROM `still-resource-497715-g5.retail_staging.sales_raw` s
 )
+
 SELECT
   b.*,
+
   CONCAT(
     IF(rn > 1,'DUPLICATE_ORDER_ID|',''),
     IF(quantity_int <= 0 OR quantity_int IS NULL,'INVALID_QUANTITY|',''),
@@ -44,67 +44,13 @@ SELECT
     IF(vp.product_id IS NULL,'INVALID_PRODUCT_FK|',''),
     IF(vs.store_id IS NULL,'INVALID_STORE_FK|','')
   ) dq_reason
+
 FROM base b
-LEFT JOIN valid_customers vc ON b.customer_id = vc.customer_id
-LEFT JOIN valid_products vp ON b.product_id = vp.product_id
-LEFT JOIN valid_stores vs ON b.store_id = vs.store_id;
+LEFT JOIN valid_customers vc
+ON b.customer_id = vc.customer_id
 
+LEFT JOIN valid_products vp
+ON b.product_id = vp.product_id
 
-
-
-step 2 -------------------------
-
-
-
-
--- Step 2: Insert bad sales records into quarantine
-
-INSERT INTO `still-resource-497715-g5.retail_quarantine_records.sales_quarantine`
-(
-  sale_id,
-  customer_id,
-  product_id,
-  store_id,
-  quantity,
-  sale_amount,
-  sale_date,
-  quarantine_reason,
-  source_table,
-  load_date,
-  quarantined_at
-)
-SELECT
-  order_id,
-  customer_id,
-  product_id,
-  store_id,
-  quantity_int,
-  sale_amount_num,
-  sale_date_dt,
-  RTRIM(dq_reason, '|'),
-  'retail_staging.sales_raw',
-  sale_date_dt,
-  CURRENT_TIMESTAMP()
-FROM `still-resource-497715-g5.retail_audit_records.sales_dq_results`
-WHERE dq_reason <> '';
-
-
-
-step 3 ---------------
-
-
-
-
-
--- Step 3: Validate quarantine reason split
-
-SELECT
-  reason,
-  COUNT(*) AS failed_records
-FROM `still-resource-497715-g5.retail_quarantine_records.sales_quarantine`,
-UNNEST(SPLIT(quarantine_reason, '|')) AS reason
-GROUP BY reason
-ORDER BY failed_records DESC;
-
-
-
+LEFT JOIN valid_stores vs
+ON b.store_id = vs.store_id;
