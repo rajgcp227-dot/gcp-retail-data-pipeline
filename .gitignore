@@ -11,3 +11,6 @@ audit/
 
 keys/*.json
 
+
+__pycache__/
+*.pyc
