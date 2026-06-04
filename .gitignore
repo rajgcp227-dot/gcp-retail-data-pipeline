@@ -14,3 +14,5 @@ keys/*.json
 
 __pycache__/
 *.pyc
+data/simulated_sftp/*.csv
+audit/*.csv
