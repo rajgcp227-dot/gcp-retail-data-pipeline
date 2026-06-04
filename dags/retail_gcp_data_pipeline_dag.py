@@ -56,7 +56,7 @@ logger = logging.getLogger("airflow.task")
 # ============================================================
 
 PROJECT_ID = Variable.get("retail_project_id", default_var="still-resource-497715-g5")
-BQ_LOCATION = Variable.get("retail_bq_location", default_var="US")
+BQ_LOCATION = Variable.get("retail_bq_location", default_var="asia-south1")
 ENV = Variable.get("retail_env", default_var="dev")
 
 LANDING_BUCKET = Variable.get(
