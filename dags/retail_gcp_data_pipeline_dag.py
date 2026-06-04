@@ -757,7 +757,7 @@ with DAG(
     # MAIN DEPENDENCY FLOW
     # ========================================================
 
-    (
+    [
         start
         >> environment_check
         >> create_pipeline_log_table
@@ -775,7 +775,7 @@ with DAG(
         >> final_reconciliation
         >> final_assertions
         >> end
-    )
+    
 
     # ========================================================
     # FAILURE MARKER FLOW
