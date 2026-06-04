@@ -2,8 +2,18 @@ project_name: gcp-retail-data-pipeline
 
 source_data_path: data/simulated_sftp
 
+# Full load is one-time/manual
 full_load_date: 20260501
 
+# DAILY = generate current date delta files
+# FIXED_DATES = generate dates from incremental_dates list
+incremental_date_mode: CURRENT_DATE
+
+# 0 = today
+# 1 = yesterday
+incremental_days_back: 0
+
+# Used only when incremental_date_mode = FIXED_DATES
 incremental_dates:
   - 20260502
   - 20260503
@@ -11,15 +21,63 @@ incremental_dates:
   - 20260505
   - 20260506
 
+# Base full load counts
 record_counts:
   customers_full: 5000
   products_full: 1000
   stores_full: 100
   sales_full: 50000
-  customers_delta: 300
-  products_delta: 100
-  stores_delta: 10
-  sales_delta: 5000
+
+# Dynamic delta volume rules
+# These are ranges. Generator will pick count between min and max.
+dynamic_delta_record_counts:
+  weekday:
+    customers_delta_min: 250
+    customers_delta_max: 450
+    products_delta_min: 80
+    products_delta_max: 130
+    stores_delta_min: 5
+    stores_delta_max: 10
+    sales_delta_min: 4000
+    sales_delta_max: 7000
+
+  weekend:
+    customers_delta_min: 500
+    customers_delta_max: 900
+    products_delta_min: 120
+    products_delta_max: 200
+    stores_delta_min: 8
+    stores_delta_max: 15
+    sales_delta_min: 10000
+    sales_delta_max: 18000
+
+  month_end:
+    customers_delta_min: 700
+    customers_delta_max: 1200
+    products_delta_min: 150
+    products_delta_max: 250
+    stores_delta_min: 10
+    stores_delta_max: 20
+    sales_delta_min: 15000
+    sales_delta_max: 25000
+
+  festival:
+    customers_delta_min: 1000
+    customers_delta_max: 2000
+    products_delta_min: 200
+    products_delta_max: 400
+    stores_delta_min: 15
+    stores_delta_max: 30
+    sales_delta_min: 30000
+    sales_delta_max: 60000
+
+# Optional festival / sale dates
+# Format: YYYYMMDD
+festival_dates:
+  - 20260615
+  - 20260815
+  - 20261020
+  - 20261101
 
 gcp:
   project_id: still-resource-497715-g5
