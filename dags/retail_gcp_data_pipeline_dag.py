@@ -380,6 +380,11 @@ with DAG(
         sql_file_path="sql/admin/create_pipeline_log_table.sql",
     )
 
+    create_loader_audit_tables = bq_sql_file_task(
+        task_id="create_loader_audit_tables",
+        sql_file_path="sql/admin/create_loader_audit_tables.sql",
+    )
+
     # ========================================================
     # STEP 2: FILE VALIDATION
     # ========================================================
@@ -757,10 +762,12 @@ with DAG(
     # MAIN DEPENDENCY FLOW
     # ========================================================
 
-    [
+    (
         start
         >> environment_check
         >> create_pipeline_log_table
+        >> create_loader_audit_tables
+        >> validate_gcs_files
         >> validate_gcs_files
         >> load_gcs_to_bq_raw
         >> dq_layer
@@ -775,7 +782,7 @@ with DAG(
         >> final_reconciliation
         >> final_assertions
         >> end
-    
+    )
 
     # ========================================================
     # FAILURE MARKER FLOW
@@ -784,6 +791,7 @@ with DAG(
     [
         environment_check,
         create_pipeline_log_table,
+        create_loader_audit_tables,
         validate_gcs_files,
         load_gcs_to_bq_raw,
         dq_layer,
