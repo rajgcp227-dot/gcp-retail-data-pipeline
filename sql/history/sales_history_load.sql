@@ -6,6 +6,8 @@
 -- Logic  : DQ clean filter + FK validation + latest record + MERGE
 -- =====================================================
 
+DECLARE v_run_id STRING DEFAULT @pipeline_run_id;
+
 MERGE `still-resource-497715-g5.retail_history_records.sales_history` AS tgt
 USING (
   WITH base AS (
@@ -35,7 +37,9 @@ USING (
         PARTITION BY order_id
         ORDER BY load_timestamp DESC
       ) AS rn
-    FROM `still-resource-497715-g5.retail_staging.sales_raw`
+    FROM `still-resource-497715-g5.retail_audit_records.sales_dq_results`
+WHERE pipeline_run_id = v_run_id
+  AND dq_reason = ''
   ),
 
   clean_sales AS (
@@ -43,14 +47,7 @@ USING (
       b.*
     FROM base b
 
-    INNER JOIN `still-resource-497715-g5.retail_history_records.customers_history` c
-      ON b.customer_id = c.customer_id
-
-    INNER JOIN `still-resource-497715-g5.retail_history_records.products_history` p
-      ON b.product_id = p.product_id
-
-    INNER JOIN `still-resource-497715-g5.retail_history_records.stores_history` st
-      ON b.store_id = st.store_id
+    
 
     WHERE b.rn = 1
 

@@ -1,23 +1,3 @@
-# ============================================================
-# main_generate_files.py
-# Retail Data Pipeline - Source File Generator
-#
-# Purpose:
-#   Generate simulated retail source CSV files with:
-#   - good records
-#   - bad records
-#   - duplicate records
-#   - schema drift records
-#   - dynamic daily volume
-#
-# Supports:
-#   - FULL load generation
-#   - DELTA load generation
-#   - CURRENT_DATE mode
-#   - FIXED_DATES / backfill mode
-#   - weekday/weekend/month-end/festival volume variation
-# ============================================================
-
 from __future__ import annotations
 
 import argparse
@@ -33,13 +13,13 @@ import yaml
 from faker import Faker
 
 # ============================================================
-# CONFIG HELPERS
+# CONFIG AND COMMON HELPERS
 # ============================================================
 
 
 def load_config(config_path: str) -> dict:
     with open(config_path, "r", encoding="utf-8") as file:
-        return yaml.safe_load(file)
+        return yaml.safe_load(file) or {}
 
 
 def ensure_output_path(path: str) -> None:
@@ -51,12 +31,8 @@ def parse_load_date(load_date: str | int):
 
 
 def stable_seed(entity: str, load_type: str, load_date: str | int) -> int:
-    """
-    Stable seed per entity + load type + date.
-    Same date generates same data if re-run.
-    """
-    seed_text = f"{entity}_{load_type}_{load_date}"
-    return int(hashlib.md5(seed_text.encode("utf-8")).hexdigest()[:8], 16)
+    seed_value = f"{entity}_{load_type}_{load_date}"
+    return int(hashlib.md5(seed_value.encode("utf-8")).hexdigest()[:8], 16)
 
 
 def get_fake(entity: str, load_type: str, load_date: str | int) -> Faker:
@@ -74,26 +50,19 @@ def random_choices(rng: random.Random, values: list, count: int) -> list:
 
 
 # ============================================================
-# DATE + VOLUME LOGIC
+# DATE AND DYNAMIC VOLUME LOGIC
 # ============================================================
 
 
 def get_incremental_dates(
-    config: dict, override_dates: Optional[list[str]] = None
+    config: dict,
+    override_dates: Optional[list[str]] = None,
 ) -> list[str]:
-    """
-    Decide which incremental dates to generate.
-
-    Priority:
-      1. CLI --dates
-      2. Config incremental_date_mode = CURRENT_DATE
-      3. Config incremental_date_mode = FIXED_DATES
-    """
 
     if override_dates:
         return [str(date) for date in override_dates]
 
-    mode = config.get("incremental_date_mode", "FIXED_DATES")
+    mode = str(config.get("incremental_date_mode", "FIXED_DATES")).upper()
 
     if mode == "CURRENT_DATE":
         days_back = int(config.get("incremental_days_back", 0))
@@ -107,101 +76,125 @@ def get_incremental_dates(
 
 
 def get_volume_profile(load_date: str | int, config: dict) -> str:
-    """
-    Decide business volume profile.
+    load_date_string = str(load_date)
+    date_object = datetime.strptime(load_date_string, "%Y%m%d").date()
 
-    Priority:
-      1. Festival date
-      2. Month-end
-      3. Weekend
-      4. Weekday
-    """
+    festival_dates = {str(date) for date in config.get("festival_dates", [])}
 
-    load_date_str = str(load_date)
-    date_obj = datetime.strptime(load_date_str, "%Y%m%d").date()
-
-    festival_dates = [str(date) for date in config.get("festival_dates", [])]
-
-    if load_date_str in festival_dates:
+    if load_date_string in festival_dates:
         return "festival"
 
-    if date_obj.day >= 28:
+    if date_object.day >= 28:
         return "month_end"
 
-    if date_obj.weekday() in [5, 6]:
+    if date_object.weekday() in (5, 6):
         return "weekend"
 
     return "weekday"
 
 
 def get_dynamic_delta_counts(load_date: str | int, config: dict) -> dict:
-    """
-    Generate dynamic record counts based on business date profile.
-
-    Example:
-      weekday   -> medium sales
-      weekend   -> high sales
-      month_end -> higher volume
-      festival  -> peak volume
-    """
-
     profile = get_volume_profile(load_date, config)
 
-    dynamic_rules = config.get("dynamic_delta_record_counts")
+    dynamic_rules = config.get("dynamic_delta_record_counts", {})
 
-    if not dynamic_rules:
-        # Fallback to static old config if dynamic section is missing.
-        static_counts = config["record_counts"]
+    if profile in dynamic_rules:
+        rules = dynamic_rules[profile]
+        rng = random.Random(int(str(load_date)))
 
         counts = {
-            "customers_delta": static_counts["customers_delta"],
-            "products_delta": static_counts["products_delta"],
-            "stores_delta": static_counts["stores_delta"],
-            "sales_delta": static_counts["sales_delta"],
+            "customers_delta": rng.randint(
+                int(rules["customers_delta_min"]),
+                int(rules["customers_delta_max"]),
+            ),
+            "products_delta": rng.randint(
+                int(rules["products_delta_min"]),
+                int(rules["products_delta_max"]),
+            ),
+            "stores_delta": rng.randint(
+                int(rules["stores_delta_min"]),
+                int(rules["stores_delta_max"]),
+            ),
+            "sales_delta": rng.randint(
+                int(rules["sales_delta_min"]),
+                int(rules["sales_delta_max"]),
+            ),
         }
 
-        print(
-            f"Load date: {load_date} | Volume profile: static_config | Counts: {counts}"
-        )
-        return counts
+    else:
+        static_counts = config.get("record_counts", {})
 
-    rules = dynamic_rules[profile]
+        counts = {
+            "customers_delta": int(static_counts.get("customers_delta", 300)),
+            "products_delta": int(static_counts.get("products_delta", 100)),
+            "stores_delta": int(static_counts.get("stores_delta", 10)),
+            "sales_delta": int(static_counts.get("sales_delta", 5000)),
+        }
 
-    rng = random.Random(int(str(load_date)))
-
-    counts = {
-        "customers_delta": rng.randint(
-            rules["customers_delta_min"],
-            rules["customers_delta_max"],
-        ),
-        "products_delta": rng.randint(
-            rules["products_delta_min"],
-            rules["products_delta_max"],
-        ),
-        "stores_delta": rng.randint(
-            rules["stores_delta_min"],
-            rules["stores_delta_max"],
-        ),
-        "sales_delta": rng.randint(
-            rules["sales_delta_min"],
-            rules["sales_delta_max"],
-        ),
-    }
-
-    print(f"Load date: {load_date} | Volume profile: {profile} | Counts: {counts}")
+    print(
+        f"Load date: {load_date} | "
+        f"Volume profile: {profile} | "
+        f"Base good-record counts: {counts}"
+    )
 
     return counts
 
 
-def should_apply_schema_drift(load_date: str | int, drift_days: set[int]) -> bool:
-    """
-    Applies schema drift based on day of month.
+def should_apply_schema_drift(
+    load_date: str | int,
+    drift_days: set[int],
+) -> bool:
+    day_number = datetime.strptime(str(load_date), "%Y%m%d").day
+    return day_number in drift_days
 
-    Example:
-      5th, 15th, 25th can simulate new column drift.
-    """
-    day = datetime.strptime(str(load_date), "%Y%m%d").day
-    return day in drift_days
+
+# ============================================================
+# DQ SIMULATION HELPERS
+# ============================================================
+
+
+def dq_simulation_enabled(config: dict) -> bool:
+    return bool(config.get("dq_simulation", {}).get("enabled", True))
+
+
+def append_bad_rows(
+    dataframe: pd.DataFrame,
+    bad_rows: list[dict],
+) -> pd.DataFrame:
+
+    if not bad_rows:
+        return dataframe
+
+    return pd.concat(
+        [dataframe, pd.DataFrame(bad_rows)],
+        ignore_index=True,
+        sort=False,
+    )
+
+
+def get_bad_sales_rules(config: dict) -> dict:
+    default_rules = {
+        "null_customer_fk": 1,
+        "invalid_customer_fk": 1,
+        "invalid_product_fk": 1,
+        "invalid_store_fk": 1,
+        "invalid_quantity": 1,
+        "invalid_sale_amount": 1,
+        "future_sale_date": 1,
+        "invalid_payment_method": 1,
+        "duplicate_order_id": 1,
+    }
+
+    dq_config = config.get("dq_simulation", {})
+
+    configured_rules = (
+        dq_config.get("bad_sales_records") or dq_config.get("sales_bad_records") or {}
+    )
+
+    return {
+        rule_name: int(configured_rules.get(rule_name, default_count))
+        for rule_name, default_count in default_rules.items()
+    }
 
 
 # ============================================================
@@ -210,17 +203,25 @@ def should_apply_schema_drift(load_date: str | int, drift_days: set[int]) -> boo
 
 
 def generate_customers(
-    count: int, load_date: str | int, load_type: str
+    count: int,
+    load_date: str | int,
+    load_type: str,
+    config: dict,
 ) -> pd.DataFrame:
+
     fake = get_fake("customers", load_type, load_date)
     rng = get_rng("customers", load_type, load_date)
+
     created_date = parse_load_date(load_date)
 
     rows = []
 
-    for i in range(1, count + 1):
+    for row_number in range(1, count + 1):
+
         customer_id = (
-            f"CUST{i:06d}" if load_type == "FULL" else f"CUSTD{load_date}{i:05d}"
+            f"CUST{row_number:06d}"
+            if load_type == "FULL"
+            else f"CUSTD{load_date}{row_number:05d}"
         )
 
         rows.append(
@@ -235,33 +236,63 @@ def generate_customers(
             }
         )
 
-    df = pd.DataFrame(rows)
+    dataframe = pd.DataFrame(rows)
 
-    # Bad records
-    if count >= 10:
-        df.loc[0, "customer_id"] = None
-        df.loc[1, "email"] = "invalid_email"
-        df.loc[2, "customer_id"] = df.loc[3, "customer_id"]
-        df.loc[4, "customer_name"] = ""
-        df.loc[5, "created_date"] = datetime.now().date() + timedelta(days=10)
-
-    # Schema drift examples for delta files
+    # Controlled schema drift
     if load_type == "DELTA":
+
         if should_apply_schema_drift(load_date, {5, 15, 25}):
-            df["loyalty_tier"] = random_choices(
+            dataframe["loyalty_tier"] = random_choices(
                 rng,
                 ["SILVER", "GOLD", "PLATINUM", None],
-                len(df),
+                len(dataframe),
             )
 
         if should_apply_schema_drift(load_date, {6, 16, 26}):
-            df["customer_segment"] = random_choices(
+            dataframe["customer_segment"] = random_choices(
                 rng,
                 ["REGULAR", "PREMIUM", "NEW", "CHURN_RISK"],
-                len(df),
+                len(dataframe),
             )
 
-    return df
+    # Append bad records without removing valid customer IDs
+    if dq_simulation_enabled(config) and not dataframe.empty:
+
+        sample = dataframe.iloc[0].to_dict()
+
+        bad_rows = [
+            {
+                **sample,
+                "customer_id": None,
+                "customer_name": "Null Customer ID",
+            },
+            {
+                **sample,
+                "customer_id": f"CUST_BAD_EMAIL_{load_date}",
+                "customer_name": "Invalid Email Customer",
+                "email": "invalid_email",
+            },
+            {
+                **sample,
+                "customer_id": sample["customer_id"],
+                "customer_name": "Duplicate Customer ID",
+            },
+            {
+                **sample,
+                "customer_id": f"CUST_BAD_NAME_{load_date}",
+                "customer_name": "",
+            },
+            {
+                **sample,
+                "customer_id": f"CUST_FUTURE_{load_date}",
+                "customer_name": "Future Date Customer",
+                "created_date": created_date + timedelta(days=10),
+            },
+        ]
+
+        dataframe = append_bad_rows(dataframe, bad_rows)
+
+    return dataframe
 
 
 # ============================================================
@@ -269,18 +300,35 @@ def generate_customers(
 # ============================================================
 
 
-def generate_products(count: int, load_date: str | int, load_type: str) -> pd.DataFrame:
+def generate_products(
+    count: int,
+    load_date: str | int,
+    load_type: str,
+    config: dict,
+) -> pd.DataFrame:
+
     fake = get_fake("products", load_type, load_date)
     rng = get_rng("products", load_type, load_date)
+
     created_date = parse_load_date(load_date)
 
-    categories = ["Electronics", "Fashion", "Grocery", "Home", "Beauty", "Sports"]
+    categories = [
+        "Electronics",
+        "Fashion",
+        "Grocery",
+        "Home",
+        "Beauty",
+        "Sports",
+    ]
 
     rows = []
 
-    for i in range(1, count + 1):
+    for row_number in range(1, count + 1):
+
         product_id = (
-            f"PROD{i:05d}" if load_type == "FULL" else f"PRODD{load_date}{i:04d}"
+            f"PROD{row_number:05d}"
+            if load_type == "FULL"
+            else f"PRODD{load_date}{row_number:04d}"
         )
 
         rows.append(
@@ -295,34 +343,67 @@ def generate_products(count: int, load_date: str | int, load_type: str) -> pd.Da
             }
         )
 
-    df = pd.DataFrame(rows)
+    dataframe = pd.DataFrame(rows)
 
-    # Bad records
-    if count >= 10:
-        df.loc[0, "product_id"] = None
-        df.loc[1, "price"] = -100
-        df.loc[2, "product_id"] = df.loc[3, "product_id"]
-        df.loc[4, "category"] = ""
-        df.loc[5, "created_date"] = datetime.now().date() + timedelta(days=10)
-
-    # Schema drift examples for delta files
+    # Controlled schema drift
     if load_type == "DELTA":
+
         if should_apply_schema_drift(load_date, {5, 15, 25}):
-            df["supplier_id"] = [f"SUP{rng.randint(1, 50):04d}" for _ in range(len(df))]
+            dataframe["supplier_id"] = [
+                f"SUP{rng.randint(1, 50):04d}" for _ in range(len(dataframe))
+            ]
 
         if should_apply_schema_drift(load_date, {6, 16, 26}):
-            df["product_status"] = random_choices(
+
+            dataframe["product_status"] = random_choices(
                 rng,
                 ["ACTIVE", "INACTIVE", "DISCONTINUED"],
-                len(df),
+                len(dataframe),
             )
 
-            # Type drift example
-            if len(df) > 8:
-                df["price"] = df["price"].astype("object")
-                df.loc[7, "price"] = "ABC"
+            if len(dataframe) > 8:
+                dataframe["price"] = dataframe["price"].astype("object")
+                dataframe.loc[7, "price"] = "ABC"
 
-    return df
+    # Append bad records without removing valid product IDs
+    if dq_simulation_enabled(config) and not dataframe.empty:
+
+        sample = dataframe.iloc[0].to_dict()
+
+        bad_rows = [
+            {
+                **sample,
+                "product_id": None,
+                "product_name": "Null Product ID",
+            },
+            {
+                **sample,
+                "product_id": f"PROD_BAD_PRICE_{load_date}",
+                "product_name": "Negative Price Product",
+                "price": -100,
+            },
+            {
+                **sample,
+                "product_id": sample["product_id"],
+                "product_name": "Duplicate Product ID",
+            },
+            {
+                **sample,
+                "product_id": f"PROD_BAD_CATEGORY_{load_date}",
+                "product_name": "Blank Category Product",
+                "category": "",
+            },
+            {
+                **sample,
+                "product_id": f"PROD_FUTURE_{load_date}",
+                "product_name": "Future Date Product",
+                "created_date": created_date + timedelta(days=10),
+            },
+        ]
+
+        dataframe = append_bad_rows(dataframe, bad_rows)
+
+    return dataframe
 
 
 # ============================================================
@@ -330,18 +411,28 @@ def generate_products(count: int, load_date: str | int, load_type: str) -> pd.Da
 # ============================================================
 
 
-def generate_stores(count: int, load_date: str | int, load_type: str) -> pd.DataFrame:
+def generate_stores(
+    count: int,
+    load_date: str | int,
+    load_type: str,
+    config: dict,
+) -> pd.DataFrame:
+
     fake = get_fake("stores", load_type, load_date)
     rng = get_rng("stores", load_type, load_date)
+
     created_date = parse_load_date(load_date)
 
     valid_regions = ["North", "South", "East", "West"]
 
     rows = []
 
-    for i in range(1, count + 1):
+    for row_number in range(1, count + 1):
+
         store_id = (
-            f"STORE{i:04d}" if load_type == "FULL" else f"STORED{load_date}{i:03d}"
+            f"STORE{row_number:04d}"
+            if load_type == "FULL"
+            else f"STORED{load_date}{row_number:03d}"
         )
 
         rows.append(
@@ -356,28 +447,59 @@ def generate_stores(count: int, load_date: str | int, load_type: str) -> pd.Data
             }
         )
 
-    df = pd.DataFrame(rows)
+    dataframe = pd.DataFrame(rows)
 
-    # Bad records
-    if count >= 10:
-        df.loc[0, "store_id"] = None
-        df.loc[1, "region"] = "UNKNOWN_REGION"
-        df.loc[2, "store_name"] = ""
-        df.loc[3, "created_date"] = datetime.now().date() + timedelta(days=10)
-
-    # Schema drift examples for delta files
+    # Controlled schema drift
     if load_type == "DELTA":
+
         if should_apply_schema_drift(load_date, {5, 15, 25}):
-            df["store_type"] = random_choices(
+            dataframe["store_type"] = random_choices(
                 rng,
                 ["MALL", "STANDALONE", "WAREHOUSE", "FRANCHISE"],
-                len(df),
+                len(dataframe),
             )
 
         if should_apply_schema_drift(load_date, {6, 16, 26}):
-            df["manager_name"] = [fake.name() for _ in range(len(df))]
+            dataframe["manager_name"] = [fake.name() for _ in range(len(dataframe))]
 
-    return df
+    # Append bad records without removing valid store IDs
+    if dq_simulation_enabled(config) and not dataframe.empty:
+
+        sample = dataframe.iloc[0].to_dict()
+
+        bad_rows = [
+            {
+                **sample,
+                "store_id": None,
+                "store_name": "Null Store ID",
+            },
+            {
+                **sample,
+                "store_id": f"STORE_BAD_REGION_{load_date}",
+                "store_name": "Invalid Region Store",
+                "region": "UNKNOWN_REGION",
+            },
+            {
+                **sample,
+                "store_id": sample["store_id"],
+                "store_name": "Duplicate Store ID",
+            },
+            {
+                **sample,
+                "store_id": f"STORE_BAD_NAME_{load_date}",
+                "store_name": "",
+            },
+            {
+                **sample,
+                "store_id": f"STORE_FUTURE_{load_date}",
+                "store_name": "Future Date Store",
+                "created_date": created_date + timedelta(days=10),
+            },
+        ]
+
+        dataframe = append_bad_rows(dataframe, bad_rows)
+
+    return dataframe
 
 
 # ============================================================
@@ -385,29 +507,129 @@ def generate_stores(count: int, load_date: str | int, load_type: str) -> pd.Data
 # ============================================================
 
 
-def generate_sales(count: int, load_date: str | int, load_type: str) -> pd.DataFrame:
+def inject_controlled_sales_bad_records(
+    dataframe: pd.DataFrame,
+    load_date: str | int,
+    config: dict,
+) -> pd.DataFrame:
+
+    if not dq_simulation_enabled(config) or dataframe.empty:
+        return dataframe
+
+    rules = get_bad_sales_rules(config)
+
+    required_rows = sum(rules.values())
+
+    if len(dataframe) < required_rows + 25:
+        raise ValueError(
+            "Not enough sales rows to inject controlled bad records. "
+            f"Required at least {required_rows + 25}, "
+            f"available {len(dataframe)}."
+        )
+
+    cursor = 20
+
+    def next_index() -> int:
+        nonlocal cursor
+
+        selected_index = cursor
+        cursor += 1
+
+        return selected_index
+
+    for _ in range(rules["null_customer_fk"]):
+        dataframe.loc[next_index(), "customer_id"] = None
+
+    for _ in range(rules["invalid_customer_fk"]):
+        dataframe.loc[next_index(), "customer_id"] = "INVALID_CUSTOMER"
+
+    for _ in range(rules["invalid_product_fk"]):
+        dataframe.loc[next_index(), "product_id"] = "INVALID_PRODUCT"
+
+    for _ in range(rules["invalid_store_fk"]):
+        dataframe.loc[next_index(), "store_id"] = "INVALID_STORE"
+
+    for _ in range(rules["invalid_quantity"]):
+        dataframe.loc[next_index(), "quantity"] = 0
+
+    for _ in range(rules["invalid_sale_amount"]):
+        dataframe.loc[next_index(), "sale_amount"] = -500.0
+
+    for _ in range(rules["future_sale_date"]):
+        dataframe.loc[next_index(), "sale_date"] = parse_load_date(
+            load_date
+        ) + timedelta(days=10)
+
+    for _ in range(rules["invalid_payment_method"]):
+        dataframe.loc[next_index(), "payment_method"] = "CRYPTO"
+
+    for duplicate_number in range(rules["duplicate_order_id"]):
+
+        duplicate_row_index = next_index()
+        original_row_index = duplicate_number
+
+        dataframe.loc[duplicate_row_index, "order_id"] = dataframe.loc[
+            original_row_index,
+            "order_id",
+        ]
+
+    return dataframe
+
+
+def generate_sales(
+    count: int,
+    load_date: str | int,
+    load_type: str,
+    config: dict,
+) -> pd.DataFrame:
+
     rng = get_rng("sales", load_type, load_date)
+
     sale_date = parse_load_date(load_date)
+
+    maximum_discount_percentage = float(
+        config.get("dq_simulation", {}).get(
+            "good_sales_max_discount_pct",
+            0.20,
+        )
+    )
 
     rows = []
 
-    for i in range(1, count + 1):
+    for row_number in range(1, count + 1):
+
         quantity = rng.randint(1, 5)
         unit_price = round(rng.uniform(50, 5000), 2)
-        discount = round(rng.uniform(0, 200), 2)
-        tax = round(unit_price * quantity * 0.05, 2)
-        sale_amount = round((unit_price * quantity) - discount + tax, 2)
+
+        gross_amount = unit_price * quantity
+
+        maximum_discount = min(
+            200.0,
+            gross_amount * maximum_discount_percentage,
+        )
+
+        discount_amount = round(
+            rng.uniform(0, maximum_discount),
+            2,
+        )
+
+        tax_amount = round(gross_amount * 0.05, 2)
+
+        sale_amount = round(
+            gross_amount - discount_amount + tax_amount,
+            2,
+        )
 
         rows.append(
             {
-                "order_id": f"ORD{load_date}{i:07d}",
+                "order_id": f"ORD{load_date}{row_number:07d}",
                 "customer_id": f"CUST{rng.randint(1, 5000):06d}",
                 "product_id": f"PROD{rng.randint(1, 1000):05d}",
                 "store_id": f"STORE{rng.randint(1, 100):04d}",
                 "quantity": quantity,
                 "unit_price": unit_price,
-                "discount_amount": discount,
-                "tax_amount": tax,
+                "discount_amount": discount_amount,
+                "tax_amount": tax_amount,
                 "sale_amount": sale_amount,
                 "sale_date": sale_date,
                 "payment_method": rng.choice(["UPI", "CARD", "CASH", "NETBANKING"]),
@@ -415,32 +637,21 @@ def generate_sales(count: int, load_date: str | int, load_type: str) -> pd.DataF
             }
         )
 
-    df = pd.DataFrame(rows)
+    dataframe = pd.DataFrame(rows)
 
-    # Bad records
-    if count >= 10:
-        df.loc[0, "customer_id"] = None
-        df.loc[1, "sale_amount"] = -500
-        df.loc[2, "quantity"] = 0
-        df.loc[3, "sale_date"] = datetime.now().date() + timedelta(days=10)
-        df.loc[4, "order_id"] = df.loc[5, "order_id"]
-        df.loc[6, "product_id"] = "INVALID_PRODUCT"
-        df.loc[7, "customer_id"] = "INVALID_CUSTOMER"
-        df.loc[8, "store_id"] = "INVALID_STORE"
-        df.loc[9, "payment_method"] = "CRYPTO"
-
-    # Schema drift examples for delta files
+    # Controlled schema drift
     if load_type == "DELTA":
+
         if should_apply_schema_drift(load_date, {3, 13, 23}):
-            df["coupon_code"] = random_choices(
+            dataframe["coupon_code"] = random_choices(
                 rng,
                 ["NEW10", "SAVE20", "FESTIVE15", None],
-                len(df),
+                len(dataframe),
             )
 
         elif should_apply_schema_drift(load_date, {4, 14, 24}):
-            # Column order drift
-            df = df[
+
+            dataframe = dataframe[
                 [
                     "sale_date",
                     "order_id",
@@ -458,34 +669,41 @@ def generate_sales(count: int, load_date: str | int, load_type: str) -> pd.DataF
             ]
 
         elif should_apply_schema_drift(load_date, {5, 15, 25}):
-            df["sale_channel"] = random_choices(
+
+            dataframe["sale_channel"] = random_choices(
                 rng,
                 ["ONLINE", "STORE", "APP"],
-                len(df),
+                len(dataframe),
             )
 
         elif should_apply_schema_drift(load_date, {6, 16, 26}):
-            # Type drift
-            if len(df) > 8:
-                df["sale_amount"] = df["sale_amount"].astype("object")
-                df.loc[7, "sale_amount"] = "ABC"
 
-            df["delivery_type"] = random_choices(
+            if len(dataframe) > 8:
+                dataframe["sale_amount"] = dataframe["sale_amount"].astype("object")
+                dataframe.loc[7, "sale_amount"] = "ABC"
+
+            dataframe["delivery_type"] = random_choices(
                 rng,
                 ["HOME_DELIVERY", "PICKUP", "EXPRESS"],
-                len(df),
+                len(dataframe),
             )
 
-    return df
+    dataframe = inject_controlled_sales_bad_records(
+        dataframe=dataframe,
+        load_date=load_date,
+        config=config,
+    )
+
+    return dataframe
 
 
 # ============================================================
-# FILE WRITER
+# FILE WRITING
 # ============================================================
 
 
 def write_file(
-    df: pd.DataFrame,
+    dataframe: pd.DataFrame,
     output_path: str,
     entity: str,
     load_type: str,
@@ -493,6 +711,7 @@ def write_file(
     overwrite: bool = False,
     dry_run: bool = False,
 ) -> Optional[str]:
+
     file_name = f"{entity}_{load_type.lower()}_{load_date}.csv"
     file_path = os.path.join(output_path, file_name)
 
@@ -503,12 +722,19 @@ def write_file(
     if dry_run:
         print(
             f"DRY RUN: would create {file_path} | "
-            f"rows: {len(df)} | columns: {list(df.columns)}"
+            f"rows: {len(dataframe)} | "
+            f"columns: {list(dataframe.columns)}"
         )
         return file_path
 
-    df.to_csv(file_path, index=False)
-    print(f"CREATED: {file_path} | rows: {len(df)} | columns: {len(df.columns)}")
+    dataframe.to_csv(file_path, index=False)
+
+    print(
+        f"CREATED: {file_path} | "
+        f"rows: {len(dataframe)} | "
+        f"columns: {len(dataframe.columns)}"
+    )
+
     return file_path
 
 
@@ -518,24 +744,27 @@ def write_file(
 
 
 def generate_full_load(
+    config: dict,
     counts: dict,
     full_date: str | int,
     output_path: str,
     overwrite: bool,
     dry_run: bool,
 ) -> list[str]:
+
     created_files = []
 
     jobs = [
-        ("customers", generate_customers, counts["customers_full"]),
-        ("products", generate_products, counts["products_full"]),
-        ("stores", generate_stores, counts["stores_full"]),
-        ("sales", generate_sales, counts["sales_full"]),
+        ("customers", generate_customers, int(counts["customers_full"])),
+        ("products", generate_products, int(counts["products_full"])),
+        ("stores", generate_stores, int(counts["stores_full"])),
+        ("sales", generate_sales, int(counts["sales_full"])),
     ]
 
     for entity, generator, count in jobs:
+
         file_path = write_file(
-            generator(count, full_date, "FULL"),
+            generator(count, full_date, "FULL", config),
             output_path,
             entity,
             "FULL",
@@ -543,6 +772,7 @@ def generate_full_load(
             overwrite=overwrite,
             dry_run=dry_run,
         )
+
         if file_path:
             created_files.append(file_path)
 
@@ -556,21 +786,40 @@ def generate_delta_loads(
     overwrite: bool,
     dry_run: bool,
 ) -> list[str]:
+
     created_files = []
 
     for load_date in incremental_dates:
+
         delta_counts = get_dynamic_delta_counts(load_date, config)
 
         jobs = [
-            ("customers", generate_customers, delta_counts["customers_delta"]),
-            ("products", generate_products, delta_counts["products_delta"]),
-            ("stores", generate_stores, delta_counts["stores_delta"]),
-            ("sales", generate_sales, delta_counts["sales_delta"]),
+            (
+                "customers",
+                generate_customers,
+                delta_counts["customers_delta"],
+            ),
+            (
+                "products",
+                generate_products,
+                delta_counts["products_delta"],
+            ),
+            (
+                "stores",
+                generate_stores,
+                delta_counts["stores_delta"],
+            ),
+            (
+                "sales",
+                generate_sales,
+                delta_counts["sales_delta"],
+            ),
         ]
 
         for entity, generator, count in jobs:
+
             file_path = write_file(
-                generator(count, load_date, "DELTA"),
+                generator(count, load_date, "DELTA", config),
                 output_path,
                 entity,
                 "DELTA",
@@ -578,18 +827,15 @@ def generate_delta_loads(
                 overwrite=overwrite,
                 dry_run=dry_run,
             )
+
             if file_path:
                 created_files.append(file_path)
 
     return created_files
 
 
-# ============================================================
-# SUMMARY
-# ============================================================
-
-
 def print_generation_summary(files: list[str]) -> None:
+
     if not files:
         print("\nNo new files created.")
         return
@@ -598,27 +844,34 @@ def print_generation_summary(files: list[str]) -> None:
     print("-" * 100)
 
     for file_path in files:
+
         path = Path(file_path)
 
         if path.exists():
-            df = pd.read_csv(path)
+
+            dataframe = pd.read_csv(path)
+
             print(
-                f"{path.name:35s} | rows: {len(df):8d} | columns: {len(df.columns):3d}"
+                f"{path.name:35s} | "
+                f"rows: {len(dataframe):8d} | "
+                f"columns: {len(dataframe.columns):3d}"
             )
+
         else:
             print(f"{path.name:35s} | dry-run file")
 
 
 # ============================================================
-# ARGPARSE
+# COMMAND-LINE ARGUMENTS
 # ============================================================
 
 
 def parse_args() -> argparse.Namespace:
+
     parser = argparse.ArgumentParser(
         description=(
-            "Generate retail source files with good, bad, schema drift, "
-            "and dynamic business volume records."
+            "Generate retail source files with dynamic volume, "
+            "controlled bad records, and schema drift."
         )
     )
 
@@ -631,31 +884,33 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dates",
         nargs="*",
-        help="Generate selected DELTA dates. Example: --dates 20260604 20260605",
+        help="Generate selected DELTA dates.",
     )
 
-    parser.add_argument(
+    generation_mode = parser.add_mutually_exclusive_group()
+
+    generation_mode.add_argument(
         "--full-only",
         action="store_true",
-        help="Generate only FULL load.",
+        help="Generate only full-load files.",
     )
 
-    parser.add_argument(
+    generation_mode.add_argument(
         "--delta-only",
         action="store_true",
-        help="Generate only DELTA load.",
+        help="Generate only delta-load files.",
     )
 
     parser.add_argument(
         "--include-full",
         action="store_true",
-        help="Generate FULL load also along with DELTA load.",
+        help="Generate full load along with delta files.",
     )
 
     parser.add_argument(
         "--output-path",
         default=None,
-        help="Override output path. If not passed, uses source_data_path from config.",
+        help="Override source_data_path from config.",
     )
 
     parser.add_argument(
@@ -667,7 +922,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show what would be generated without writing files.",
+        help="Show output without creating files.",
     )
 
     return parser.parse_args()
@@ -679,10 +934,13 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+
     args = parse_args()
 
     config = load_config(args.config)
+
     output_path = args.output_path or config["source_data_path"]
+
     ensure_output_path(output_path)
 
     counts = config["record_counts"]
@@ -704,8 +962,10 @@ def main() -> None:
     print("=" * 100)
 
     if args.full_only:
+
         created_files.extend(
             generate_full_load(
+                config=config,
                 counts=counts,
                 full_date=full_date,
                 output_path=output_path,
@@ -715,9 +975,12 @@ def main() -> None:
         )
 
     else:
+
         if args.include_full:
+
             created_files.extend(
                 generate_full_load(
+                    config=config,
                     counts=counts,
                     full_date=full_date,
                     output_path=output_path,
@@ -726,7 +989,10 @@ def main() -> None:
                 )
             )
 
-        incremental_dates = get_incremental_dates(config, args.dates)
+        incremental_dates = get_incremental_dates(
+            config,
+            args.dates,
+        )
 
         created_files.extend(
             generate_delta_loads(

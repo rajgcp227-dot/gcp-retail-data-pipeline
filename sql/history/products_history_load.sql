@@ -6,6 +6,8 @@
 -- Logic  : DQ clean filter + latest record + MERGE
 -- =====================================================
 
+DECLARE v_run_id STRING DEFAULT @pipeline_run_id;
+
 MERGE `still-resource-497715-g5.retail_history_records.products_history` AS tgt
 USING (
   WITH base AS (
@@ -19,8 +21,12 @@ USING (
       load_type,
       source_file_name,
       batch_id,
+      pipeline_run_id,
       load_timestamp
-    FROM `still-resource-497715-g5.retail_staging.products_raw`
+    FROM `still-resource-497715-g5.retail_audit_records.products_dq_results`
+    WHERE pipeline_run_id = v_run_id
+    AND dq_reason = ''
+
   ),
 
   ranked AS (
@@ -43,6 +49,7 @@ USING (
     load_type,
     source_file_name,
     batch_id,
+    pipeline_run_id,
     load_timestamp,
     CURRENT_TIMESTAMP() AS history_created_at,
     CURRENT_TIMESTAMP() AS history_updated_at
@@ -67,6 +74,8 @@ USING (
     AND TRIM(source_file_name) != ''
     AND batch_id IS NOT NULL
     AND TRIM(batch_id) != ''
+    AND pipeline_run_id IS NOT NULL
+    AND TRIM(pipeline_run_id) != ''
     AND load_timestamp IS NOT NULL
 ) AS src
 ON tgt.product_id = src.product_id
@@ -81,6 +90,7 @@ WHEN MATCHED THEN
     tgt.load_type = src.load_type,
     tgt.source_file_name = src.source_file_name,
     tgt.batch_id = src.batch_id,
+    tgt.pipeline_run_id = src.pipeline_run_id,
     tgt.load_timestamp = src.load_timestamp,
     tgt.history_updated_at = CURRENT_TIMESTAMP()
 
@@ -95,6 +105,7 @@ WHEN NOT MATCHED THEN
     load_type,
     source_file_name,
     batch_id,
+    pipeline_run_id,
     load_timestamp,
     history_created_at,
     history_updated_at
@@ -109,6 +120,7 @@ WHEN NOT MATCHED THEN
     src.load_type,
     src.source_file_name,
     src.batch_id,
+    src.pipeline_run_id,
     src.load_timestamp,
     CURRENT_TIMESTAMP(),
     CURRENT_TIMESTAMP()

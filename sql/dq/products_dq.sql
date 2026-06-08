@@ -1,4 +1,4 @@
-DECLARE v_run_id STRING DEFAULT GENERATE_UUID();
+DECLARE v_run_id STRING DEFAULT @pipeline_run_id;
 
 CREATE TEMP TABLE product_dq AS
 WITH base AS (
@@ -6,7 +6,8 @@ WITH base AS (
     *,
     SAFE_CAST(price AS NUMERIC) AS price_num,
     SAFE_CAST(created_date AS DATE) AS created_date_dt
-  FROM `still-resource-497715-g5.retail_staging.products_raw`
+  FROM `still-resource-497715-g5.retail_staging.products_raw` AS products
+WHERE products.pipeline_run_id = v_run_id
 ),
 ranked AS (
   SELECT
@@ -42,6 +43,12 @@ SELECT
     IF(load_timestamp IS NULL, 'NULL_LOAD_TIMESTAMP|', '')
   ) AS dq_reason
 FROM ranked;
+
+ CREATE OR REPLACE TABLE
+`still-resource-497715-g5.retail_audit_records.products_dq_results`
+AS
+SELECT *
+FROM product_dq;
 
 INSERT INTO `still-resource-497715-g5.retail_quarantine_records.products_quarantine`
 (
@@ -208,3 +215,162 @@ SELECT
   CURRENT_TIMESTAMP()
 FROM `still-resource-497715-g5.retail_audit_records.dq_validation_results`
 WHERE run_id = v_run_id;
+
+
+-- Product threshold results
+DELETE FROM `still-resource-497715-g5.retail_audit_records.dq_rule_results`
+WHERE pipeline_run_id = v_run_id
+  AND source_name = 'products';
+
+INSERT INTO `still-resource-497715-g5.retail_audit_records.dq_rule_results`
+(
+  pipeline_run_id,
+  source_name,
+  source_file_name,
+  rule_name,
+  severity,
+  total_records,
+  failed_records,
+  failed_percentage,
+  warning_percentage,
+  failure_percentage,
+  max_failed_records,
+  dq_status,
+  evaluated_at
+)
+SELECT
+  v_run_id,
+  'products',
+  MAX(p.source_file_name),
+  t.rule_name,
+  t.severity,
+  MAX(v.total_record_count),
+  MAX(v.failed_record_count),
+
+  CAST(
+    ROUND(
+      SAFE_DIVIDE(
+        MAX(v.failed_record_count),
+        MAX(v.total_record_count)
+      ) * 100,
+      4
+    ) AS NUMERIC
+  ),
+
+  t.warning_percentage,
+  t.failure_percentage,
+  t.max_failed_records,
+
+  CASE
+    WHEN MAX(v.failed_record_count) > t.max_failed_records
+      OR SAFE_DIVIDE(
+           MAX(v.failed_record_count),
+           MAX(v.total_record_count)
+         ) * 100 > t.failure_percentage
+      THEN 'FAIL'
+
+    WHEN SAFE_DIVIDE(
+           MAX(v.failed_record_count),
+           MAX(v.total_record_count)
+         ) * 100 > t.warning_percentage
+      THEN 'PASS_WITH_QUARANTINE'
+
+    ELSE 'PASS'
+  END,
+
+  CURRENT_TIMESTAMP()
+
+FROM `still-resource-497715-g5.retail_audit_records.dq_validation_results` v
+
+JOIN `still-resource-497715-g5.retail_audit_records.dq_rule_thresholds` t
+  ON t.source_name = 'products'
+ AND t.rule_name = v.check_name
+ AND t.active_flag = TRUE
+
+CROSS JOIN product_dq p
+
+WHERE v.run_id = v_run_id
+  AND v.table_name = 'products_raw'
+
+GROUP BY
+  t.rule_name,
+  t.severity,
+  t.warning_percentage,
+  t.failure_percentage,
+  t.max_failed_records;
+
+
+  -- Product batch summary
+DELETE FROM `still-resource-497715-g5.retail_audit_records.dq_batch_summary`
+WHERE pipeline_run_id = v_run_id
+  AND source_name = 'products';
+
+INSERT INTO `still-resource-497715-g5.retail_audit_records.dq_batch_summary`
+(
+  pipeline_run_id,
+  source_name,
+  source_file_name,
+  total_records,
+  valid_records,
+  invalid_records,
+  invalid_percentage,
+  passed_rule_count,
+  warning_rule_count,
+  failed_rule_count,
+  batch_status,
+  evaluated_at
+)
+WITH batch_counts AS (
+  SELECT
+    MAX(source_file_name) AS source_file_name,
+    COUNT(*) AS total_records,
+    COUNTIF(dq_reason = '') AS valid_records,
+    COUNTIF(dq_reason != '') AS invalid_records
+  FROM product_dq
+),
+rule_counts AS (
+  SELECT
+    COUNTIF(dq_status = 'PASS') AS passed_rule_count,
+    COUNTIF(dq_status = 'PASS_WITH_QUARANTINE') AS warning_rule_count,
+    COUNTIF(dq_status = 'FAIL') AS failed_rule_count
+  FROM `still-resource-497715-g5.retail_audit_records.dq_rule_results`
+  WHERE pipeline_run_id = v_run_id
+    AND source_name = 'products'
+)
+SELECT
+  v_run_id,
+  'products',
+  batch.source_file_name,
+  batch.total_records,
+  batch.valid_records,
+  batch.invalid_records,
+  CAST(
+    ROUND(
+      SAFE_DIVIDE(batch.invalid_records, batch.total_records) * 100,
+      4
+    ) AS NUMERIC
+  ),
+  rules.passed_rule_count,
+  rules.warning_rule_count,
+  rules.failed_rule_count,
+  CASE
+    WHEN rules.failed_rule_count > 0 THEN 'FAIL'
+    WHEN rules.warning_rule_count > 0 THEN 'PASS_WITH_QUARANTINE'
+    ELSE 'PASS'
+  END,
+  CURRENT_TIMESTAMP()
+FROM batch_counts AS batch
+CROSS JOIN rule_counts AS rules;
+
+SELECT
+  total_records,
+  valid_records,
+  invalid_records,
+  invalid_percentage,
+  passed_rule_count,
+  warning_rule_count,
+  failed_rule_count,
+  batch_status
+FROM `still-resource-497715-g5.retail_audit_records.dq_batch_summary`
+WHERE pipeline_run_id = v_run_id
+  AND source_name = 'products';

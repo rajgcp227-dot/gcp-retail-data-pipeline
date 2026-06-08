@@ -17,16 +17,6 @@ SELECT
   created_date
 FROM `still-resource-497715-g5.retail_reporting_records.dim_customer`;
 
-
-
-
-
-
-
-
-
-
-
 -- =====================================================
 -- create_authorized_views.sql
 -- Retail Data Pipeline - Secure Reporting Views
@@ -108,7 +98,7 @@ SELECT
 FROM `still-resource-497715-g5.retail_reporting_records.fact_sales`
 GROUP BY
   sale_date,
-
+  sale_channel,
   payment_method;
 
 

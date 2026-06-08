@@ -86,6 +86,7 @@ TABLE_MAPPING = {
 METADATA_COLUMNS = {
     "source_file_name",
     "batch_id",
+    "pipeline_run_id",
     "load_timestamp",
 }
 
@@ -495,58 +496,111 @@ def insert_temp_to_raw(
     gcs_uri: str,
     batch_id: str,
 ) -> None:
-    raw_table_id = f"{cfg.project_id}.{cfg.staging_dataset}.{raw_table}"
+    """
+    Load one source file from the temporary table into its raw table.
 
-    raw_columns = get_table_columns(bq_client, cfg, raw_table)
+    batch_id:
+        Unique identifier generated for the individual file load.
+
+    cfg.run_id:
+        Shared pipeline-run identifier supplied using --run-id.
+        All files processed in the same execution receive this value.
+    """
+
+    raw_table_id = f"{cfg.project_id}." f"{cfg.staging_dataset}." f"{raw_table}"
+
+    raw_columns = get_table_columns(
+        bq_client=bq_client,
+        cfg=cfg,
+        table_name=raw_table,
+    )
+
     temp_table_name = temp_table_id.split(".")[-1]
-    temp_columns = get_table_columns(bq_client, cfg, temp_table_name)
 
-    business_columns = [col for col in raw_columns if col not in METADATA_COLUMNS]
+    temp_columns = get_table_columns(
+        bq_client=bq_client,
+        cfg=cfg,
+        table_name=temp_table_name,
+    )
 
-    select_columns = []
+    business_columns = [
+        column_name
+        for column_name in raw_columns
+        if column_name not in METADATA_COLUMNS
+    ]
 
-    for col in business_columns:
-        if col in temp_columns:
-            select_columns.append(f"`{col}`")
+    select_expressions = []
+
+    for column_name in business_columns:
+        if column_name in temp_columns:
+            select_expressions.append(f"`{column_name}`")
         else:
-            select_columns.append(f"CAST(NULL AS STRING) AS `{col}`")
+            select_expressions.append(f"CAST(NULL AS STRING) AS `{column_name}`")
 
-    delete_existing_query = f"""
+    delete_query = f"""
     DELETE FROM `{raw_table_id}`
-    WHERE source_file_name = @gcs_uri
+    WHERE source_file_name = @source_file_name
     """
 
     delete_job_config = bigquery.QueryJobConfig(
         query_parameters=[
-            ScalarQueryParameter("gcs_uri", "STRING", gcs_uri),
+            bigquery.ScalarQueryParameter(
+                "source_file_name",
+                "STRING",
+                gcs_uri,
+            )
         ]
     )
 
     insert_query = f"""
     INSERT INTO `{raw_table_id}`
     (
-      {", ".join([f"`{col}`" for col in business_columns])},
-      source_file_name,
-      batch_id,
-      load_timestamp
+        {", ".join(f"`{column}`" for column in business_columns)},
+        source_file_name,
+        batch_id,
+        pipeline_run_id,
+        load_timestamp
     )
     SELECT
-      {", ".join(select_columns)},
-      @gcs_uri AS source_file_name,
-      @batch_id AS batch_id,
-      CURRENT_TIMESTAMP() AS load_timestamp
+        {", ".join(select_expressions)},
+        @source_file_name,
+        @batch_id,
+        @pipeline_run_id,
+        CURRENT_TIMESTAMP()
     FROM `{temp_table_id}`
     """
 
     insert_job_config = bigquery.QueryJobConfig(
         query_parameters=[
-            ScalarQueryParameter("gcs_uri", "STRING", gcs_uri),
-            ScalarQueryParameter("batch_id", "STRING", batch_id),
+            bigquery.ScalarQueryParameter(
+                "source_file_name",
+                "STRING",
+                gcs_uri,
+            ),
+            bigquery.ScalarQueryParameter(
+                "batch_id",
+                "STRING",
+                batch_id,
+            ),
+            bigquery.ScalarQueryParameter(
+                "pipeline_run_id",
+                "STRING",
+                cfg.run_id,
+            ),
         ]
     )
 
-    run_query(bq_client, delete_existing_query, delete_job_config)
-    run_query(bq_client, insert_query, insert_job_config)
+    run_query(
+        bq_client=bq_client,
+        query=delete_query,
+        job_config=delete_job_config,
+    )
+
+    run_query(
+        bq_client=bq_client,
+        query=insert_query,
+        job_config=insert_job_config,
+    )
 
 
 def load_file_to_landing_and_raw(

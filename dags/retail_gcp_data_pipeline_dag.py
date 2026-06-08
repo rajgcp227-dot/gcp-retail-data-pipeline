@@ -7,6 +7,7 @@
 #   -> File Validation
 #   -> BigQuery Raw Load
 #   -> DQ + Quarantine + Audit
+#   -> DQ Gate
 #   -> BigQuery Snapshots
 #   -> History MERGE Loads
 #   -> Reporting Star Schema
@@ -165,7 +166,8 @@ def notify_failure(context):
     logger.error("============================================================")
     logger.error("RETAIL PIPELINE FAILURE")
     logger.error(
-        "DAG ID  : %s", context.get("dag").dag_id if context.get("dag") else "unknown"
+        "DAG ID  : %s",
+        context.get("dag").dag_id if context.get("dag") else "unknown",
     )
     logger.error("TASK ID : %s", task_instance.task_id if task_instance else "unknown")
     logger.error("RUN ID  : %s", context.get("run_id"))
@@ -191,7 +193,8 @@ def notify_retry(context):
     logger.warning("============================================================")
     logger.warning("RETAIL PIPELINE TASK RETRY")
     logger.warning(
-        "DAG ID  : %s", context.get("dag").dag_id if context.get("dag") else "unknown"
+        "DAG ID  : %s",
+        context.get("dag").dag_id if context.get("dag") else "unknown",
     )
     logger.warning(
         "TASK ID : %s", task_instance.task_id if task_instance else "unknown"
@@ -216,7 +219,8 @@ def notify_success(context):
     logger.info("============================================================")
     logger.info("RETAIL PIPELINE SUCCESS")
     logger.info(
-        "DAG ID : %s", context.get("dag").dag_id if context.get("dag") else "unknown"
+        "DAG ID : %s",
+        context.get("dag").dag_id if context.get("dag") else "unknown",
     )
     logger.info("RUN ID : %s", context.get("run_id"))
     logger.info("============================================================")
@@ -259,13 +263,10 @@ def bq_sql_file_task(
     """
     Creates a BigQuery task using an external SQL file.
 
-    Example:
-      bq_sql_file_task(
-          task_id="customers_dq",
-          sql_file_path="sql/dq/customers_dq.sql"
-      )
-
-    Airflow reads the SQL file from template_searchpath.
+    Important:
+    - All SQL files receive @pipeline_run_id.
+    - SQL files can use:
+        DECLARE v_run_id STRING DEFAULT @pipeline_run_id;
     """
 
     return BigQueryInsertJobOperator(
@@ -277,6 +278,14 @@ def bq_sql_file_task(
                 "query": "{% include '" + sql_file_path + "' %}",
                 "useLegacySql": False,
                 "priority": "INTERACTIVE",
+                "parameterMode": "NAMED",
+                "queryParameters": [
+                    {
+                        "name": "pipeline_run_id",
+                        "parameterType": {"type": "STRING"},
+                        "parameterValue": {"value": "{{ run_id }}"},
+                    }
+                ],
             },
             "labels": {
                 "pipeline": "retail_data_pipeline",
@@ -356,6 +365,7 @@ with DAG(
         echo "SCRIPTS_HOME     : {SCRIPTS_HOME}"
         echo "RUN_DATE         : {{{{ ds }}}}"
         echo "RUN_ID           : {{{{ run_id }}}}"
+        echo "PROCESS_DATE     : {{{{ ds_nodash }}}}"
         echo "============================================================"
 
         test -f {SCRIPTS_HOME}/gcs_file_validator.py
@@ -372,7 +382,7 @@ with DAG(
     )
 
     # ========================================================
-    # STEP 1: CREATE PIPELINE LOG TABLE
+    # STEP 1: ADMIN / FRAMEWORK SETUP
     # ========================================================
 
     create_pipeline_log_table = bq_sql_file_task(
@@ -384,6 +394,50 @@ with DAG(
         task_id="create_loader_audit_tables",
         sql_file_path="sql/admin/create_loader_audit_tables.sql",
     )
+
+    create_dq_framework_tables = bq_sql_file_task(
+        task_id="create_dq_framework_tables",
+        sql_file_path="sql/admin/create_dq_framework_tables.sql",
+    )
+
+    add_pipeline_run_metadata = bq_sql_file_task(
+        task_id="add_pipeline_run_metadata",
+        sql_file_path="sql/admin/add_pipeline_run_metadata.sql",
+    )
+
+    seed_sales_dq_thresholds = bq_sql_file_task(
+        task_id="seed_sales_dq_thresholds",
+        sql_file_path="sql/admin/seed_dq_rule_thresholds.sql",
+    )
+
+    seed_customer_dq_thresholds = bq_sql_file_task(
+        task_id="seed_customer_dq_thresholds",
+        sql_file_path="sql/admin/seed_customer_dq_thresholds.sql",
+    )
+
+    seed_product_dq_thresholds = bq_sql_file_task(
+        task_id="seed_product_dq_thresholds",
+        sql_file_path="sql/admin/seed_product_dq_thresholds.sql",
+    )
+
+    seed_store_dq_thresholds = bq_sql_file_task(
+        task_id="seed_store_dq_thresholds",
+        sql_file_path="sql/admin/seed_store_dq_thresholds.sql",
+    )
+
+    with TaskGroup(group_id="admin_setup") as admin_setup:
+        (
+            create_pipeline_log_table
+            >> create_loader_audit_tables
+            >> create_dq_framework_tables
+            >> add_pipeline_run_metadata
+            >> [
+                seed_sales_dq_thresholds,
+                seed_customer_dq_thresholds,
+                seed_product_dq_thresholds,
+                seed_store_dq_thresholds,
+            ]
+        )
 
     # ========================================================
     # STEP 2: FILE VALIDATION
@@ -436,6 +490,7 @@ with DAG(
         echo "VALIDATED_BUCKET : {VALIDATED_BUCKET}"
         echo "RUN_DATE         : {{{{ ds }}}}"
         echo "RUN_ID           : {{{{ run_id }}}}"
+        echo "PROCESS_DATE     : {{{{ ds_nodash }}}}"
         echo "============================================================"
 
         cd {DAGS_HOME}
@@ -444,7 +499,9 @@ with DAG(
           --project-id "{PROJECT_ID}" \
           --validated-bucket "{VALIDATED_BUCKET}" \
           --run-date "{{{{ ds }}}}" \
-          --run-id "{{{{ run_id }}}}"
+          --run-id "{{{{ run_id }}}}" \
+          --process-dates "{{{{ ds_nodash }}}}" \
+          --fail-on-error
 
         echo "TASK COMPLETED: load_gcs_to_bq_raw"
         echo "============================================================"
@@ -484,7 +541,17 @@ with DAG(
         [customers_dq, products_dq, stores_dq] >> sales_dq
 
     # ========================================================
-    # STEP 5: BACKUP DATASET
+    # STEP 5: DQ GATE
+    # ========================================================
+
+    check_dq_gate = bq_sql_file_task(
+        task_id="check_dq_gate",
+        sql_file_path="sql/dq/check_dq_gate.sql",
+        priority_weight=10,
+    )
+
+    # ========================================================
+    # STEP 6: BACKUP DATASET
     # ========================================================
 
     create_backup_dataset = bq_sql_file_task(
@@ -493,7 +560,7 @@ with DAG(
     )
 
     # ========================================================
-    # STEP 6: HISTORY SNAPSHOTS
+    # STEP 7: HISTORY SNAPSHOTS
     # ========================================================
 
     create_history_snapshots = bq_sql_file_task(
@@ -502,7 +569,7 @@ with DAG(
     )
 
     # ========================================================
-    # STEP 7: HISTORY LAYER
+    # STEP 8: HISTORY LAYER
     # ========================================================
 
     with TaskGroup(group_id="history_layer") as history_layer:
@@ -538,7 +605,7 @@ with DAG(
         ] >> sales_history_load
 
     # ========================================================
-    # STEP 8: REPORTING SNAPSHOTS
+    # STEP 9: REPORTING SNAPSHOTS
     # ========================================================
 
     create_reporting_snapshots = bq_sql_file_task(
@@ -547,7 +614,7 @@ with DAG(
     )
 
     # ========================================================
-    # STEP 9: REPORTING STAR SCHEMA
+    # STEP 10: REPORTING STAR SCHEMA
     # ========================================================
 
     with TaskGroup(group_id="reporting_star_schema") as reporting_star_schema:
@@ -579,7 +646,7 @@ with DAG(
         [create_dim_customer, create_dim_product, create_dim_store] >> create_fact_sales
 
     # ========================================================
-    # STEP 10: NORMAL REPORTING VIEWS
+    # STEP 11: NORMAL REPORTING VIEWS
     # ========================================================
 
     with TaskGroup(group_id="reporting_views") as reporting_views:
@@ -623,7 +690,7 @@ with DAG(
         ]
 
     # ========================================================
-    # STEP 11: MATERIALIZED VIEWS
+    # STEP 12: MATERIALIZED VIEWS
     # ========================================================
 
     create_materialized_views = bq_sql_file_task(
@@ -633,7 +700,7 @@ with DAG(
     )
 
     # ========================================================
-    # STEP 12: SECURE / AUTHORIZED VIEWS
+    # STEP 13: SECURE / AUTHORIZED VIEWS
     # ========================================================
 
     create_authorized_views = bq_sql_file_task(
@@ -643,7 +710,7 @@ with DAG(
     )
 
     # ========================================================
-    # STEP 13: FINAL RECONCILIATION
+    # STEP 14: FINAL RECONCILIATION
     # ========================================================
 
     final_reconciliation = BigQueryInsertJobOperator(
@@ -690,7 +757,7 @@ with DAG(
     )
 
     # ========================================================
-    # STEP 14: FINAL ASSERTIONS
+    # STEP 15: FINAL ASSERTIONS
     # ========================================================
 
     final_assertions = BigQueryInsertJobOperator(
@@ -765,12 +832,11 @@ with DAG(
     (
         start
         >> environment_check
-        >> create_pipeline_log_table
-        >> create_loader_audit_tables
-        >> validate_gcs_files
+        >> admin_setup
         >> validate_gcs_files
         >> load_gcs_to_bq_raw
         >> dq_layer
+        >> check_dq_gate
         >> create_backup_dataset
         >> create_history_snapshots
         >> history_layer
@@ -792,9 +858,16 @@ with DAG(
         environment_check,
         create_pipeline_log_table,
         create_loader_audit_tables,
+        create_dq_framework_tables,
+        add_pipeline_run_metadata,
+        seed_sales_dq_thresholds,
+        seed_customer_dq_thresholds,
+        seed_product_dq_thresholds,
+        seed_store_dq_thresholds,
         validate_gcs_files,
         load_gcs_to_bq_raw,
         dq_layer,
+        check_dq_gate,
         create_backup_dataset,
         create_history_snapshots,
         history_layer,

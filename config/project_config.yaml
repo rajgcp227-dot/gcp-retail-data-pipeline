@@ -88,3 +88,25 @@ gcs:
   validated_bucket: retail-validated-dev-raj1779989813
   rejected_bucket: retail-rejected-dev-raj1779989813
   archive_bucket: retail-archive-dev-raj1779989813
+
+
+  dq_simulation:
+  enabled: true
+
+  # Preserve valid master records and append separate invalid rows.
+  append_bad_master_records: true
+
+  # Good sales discounts cannot exceed this percentage of gross amount.
+  good_sales_max_discount_pct: 0.20
+
+  # Controlled number of intentional sales failures.
+  sales_bad_records:
+    null_customer_fk: 1
+    invalid_customer_fk: 1
+    invalid_product_fk: 1
+    invalid_store_fk: 1
+    invalid_quantity: 1
+    invalid_sale_amount: 1
+    future_sale_date: 1
+    invalid_payment_method: 1
+    duplicate_order_id: 1

@@ -6,6 +6,8 @@
 -- Logic  : DQ clean filter + latest record + MERGE
 -- =====================================================
 
+DECLARE v_run_id STRING DEFAULT @pipeline_run_id;
+
 MERGE `still-resource-497715-g5.retail_history_records.stores_history` AS tgt
 USING (
   WITH base AS (
@@ -20,7 +22,9 @@ USING (
       source_file_name,
       batch_id,
       load_timestamp
-    FROM `still-resource-497715-g5.retail_staging.stores_raw`
+    FROM `still-resource-497715-g5.retail_audit_records.stores_dq_results`
+WHERE pipeline_run_id = v_run_id
+  AND dq_reason = ''
   ),
 
   ranked AS (
