@@ -7,5 +7,5 @@
 
 CREATE SCHEMA IF NOT EXISTS `still-resource-497715-g5.retail_backup_records`
 OPTIONS (
-  location = 'US'
+  location = 'asia-south1'
 );

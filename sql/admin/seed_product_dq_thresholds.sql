@@ -1,3 +1,4 @@
+
 DELETE FROM `still-resource-497715-g5.retail_audit_records.dq_rule_thresholds`
 WHERE source_name = 'products'
   AND rule_name IN (

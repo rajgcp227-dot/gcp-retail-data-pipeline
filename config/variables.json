@@ -1,0 +1,10 @@
+{
+    "retail_project_id": "still-resource-497715-g5",
+    "retail_bq_location": "asia-south1",
+    "retail_env": "dev",
+    "retail_landing_bucket": "retail-landing-dev-raj1779989813",
+    "retail_validated_bucket": "retail-validated-dev-raj1779989813",
+    "retail_rejected_bucket": "retail-rejected-dev-raj1779989813",
+    "retail_archive_bucket": "retail-archive-dev-raj1779989813",
+    "retail_alert_email": "rajgcp.227@outlook.com"
+}

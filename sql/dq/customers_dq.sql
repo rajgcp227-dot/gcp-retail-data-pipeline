@@ -264,7 +264,7 @@ INSERT INTO `still-resource-497715-g5.retail_audit_records.dq_rule_results`
 )
 WITH batch_file AS (
   SELECT
-    MAX(source_file_name) AS source_file_name
+    COALESCE(MAX(source_file_name), 'NO_FILE_FOR_RUN') AS source_file_name,
   FROM `still-resource-497715-g5.retail_audit_records.customers_dq_results`
 ),
 
@@ -288,6 +288,7 @@ SELECT
   COALESCE(validation.total_record_count, 0) AS total_records,
   COALESCE(validation.failed_record_count, 0) AS failed_records,
 
+  COALESCE(
   CAST(
     ROUND(
       SAFE_DIVIDE(
@@ -296,13 +297,16 @@ SELECT
       ) * 100,
       4
     ) AS NUMERIC
-  ) AS failed_percentage,
+  ),
+  0
+) AS failed_percentage,
 
   threshold.warning_percentage,
   threshold.failure_percentage,
   threshold.max_failed_records,
 
   CASE
+    WHEN COALESCE(validation.total_record_count, 0) = 0 THEN 'FAIL'
     WHEN COALESCE(validation.failed_record_count, 0) > threshold.max_failed_records
       OR SAFE_DIVIDE(
            COALESCE(validation.failed_record_count, 0),
@@ -351,7 +355,7 @@ INSERT INTO `still-resource-497715-g5.retail_audit_records.dq_batch_summary`
 )
 WITH batch_counts AS (
   SELECT
-    MAX(source_file_name) AS source_file_name,
+    COALESCE(MAX(source_file_name), 'NO_FILE_FOR_RUN') AS source_file_name,
     COUNT(*) AS total_records,
     COUNTIF(dq_reason = '') AS valid_records,
     COUNTIF(dq_reason != '') AS invalid_records
@@ -373,20 +377,24 @@ SELECT
   batch.total_records,
   batch.valid_records,
   batch.invalid_records,
+  COALESCE(
   CAST(
     ROUND(
-      SAFE_DIVIDE(batch.invalid_records, batch.total_records) * 100,
+      SAFE_DIVIDE(batch.invalid_records, NULLIF(batch.total_records, 0)) * 100,
       4
     ) AS NUMERIC
   ),
+  0
+),
   rules.passed_rule_count,
   rules.warning_rule_count,
   rules.failed_rule_count,
   CASE
-    WHEN rules.failed_rule_count > 0 THEN 'FAIL'
-    WHEN rules.warning_rule_count > 0 THEN 'PASS_WITH_QUARANTINE'
-    ELSE 'PASS'
-  END,
+  WHEN batch.total_records = 0 THEN 'FAIL'
+  WHEN rules.failed_rule_count > 0 THEN 'FAIL'
+  WHEN rules.warning_rule_count > 0 THEN 'PASS_WITH_QUARANTINE'
+  ELSE 'PASS'
+END,
   CURRENT_TIMESTAMP()
 FROM batch_counts AS batch
 CROSS JOIN rule_counts AS rules;

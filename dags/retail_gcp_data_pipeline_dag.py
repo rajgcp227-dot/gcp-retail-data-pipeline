@@ -210,6 +210,32 @@ def notify_retry(context):
     )
 
 
+def notify_task_success(context):
+    """
+    Runs when an individual task succeeds.
+    Logs task success to Airflow logs and BigQuery pipeline_run_log.
+    """
+
+    task_instance = context.get("task_instance")
+
+    logger.info("============================================================")
+    logger.info("RETAIL PIPELINE TASK SUCCESS")
+    logger.info(
+        "DAG ID  : %s",
+        context.get("dag").dag_id if context.get("dag") else "unknown",
+    )
+    logger.info("TASK ID : %s", task_instance.task_id if task_instance else "unknown")
+    logger.info("RUN ID  : %s", context.get("run_id"))
+    logger.info("============================================================")
+
+    write_pipeline_log(
+        context=context,
+        status="SUCCESS",
+        message="Task completed successfully",
+        error_message=None,
+    )
+
+
 def notify_success(context):
     """
     Runs when the DAG succeeds.
@@ -245,6 +271,7 @@ default_args = {
     "execution_timeout": timedelta(hours=2),
     "on_failure_callback": notify_failure,
     "on_retry_callback": notify_retry,
+    "on_success_callback": notify_task_success,
     "email_on_failure": False,
     "email_on_retry": False,
 }
@@ -424,20 +451,29 @@ with DAG(
         task_id="seed_store_dq_thresholds",
         sql_file_path="sql/admin/seed_store_dq_thresholds.sql",
     )
-
     with TaskGroup(group_id="admin_setup") as admin_setup:
-        (
-            create_pipeline_log_table
-            >> create_loader_audit_tables
-            >> create_dq_framework_tables
-            >> add_pipeline_run_metadata
-            >> [
-                seed_sales_dq_thresholds,
-                seed_customer_dq_thresholds,
-                seed_product_dq_thresholds,
-                seed_store_dq_thresholds,
-            ]
+
+        admin_setup_start = EmptyOperator(
+            task_id="admin_setup_start",
         )
+
+        admin_setup_completed = EmptyOperator(
+            task_id="admin_setup_completed",
+            trigger_rule=TriggerRule.ALL_SUCCESS,
+        )
+
+    (
+        admin_setup_start
+        >> create_pipeline_log_table
+        >> create_loader_audit_tables
+        >> create_dq_framework_tables
+        >> add_pipeline_run_metadata
+        >> seed_sales_dq_thresholds
+        >> seed_customer_dq_thresholds
+        >> seed_product_dq_thresholds
+        >> seed_store_dq_thresholds
+        >> admin_setup_completed
+    )
 
     # ========================================================
     # STEP 2: FILE VALIDATION
@@ -498,12 +534,12 @@ with DAG(
         python3 {SCRIPTS_HOME}/load_gcs_to_bq_staging.py \
           --project-id "{PROJECT_ID}" \
           --validated-bucket "{VALIDATED_BUCKET}" \
-          --run-date "{{{{ ds }}}}" \
+          --run-date "{{{{ dag_run.conf.get('run_date', ds) }}}}" \
           --run-id "{{{{ run_id }}}}" \
-          --process-dates "{{{{ ds_nodash }}}}" \
+          --process-dates "{{{{ dag_run.conf.get('process_date', ds_nodash) }}}}" \
           --fail-on-error
 
-        echo "TASK COMPLETED: load_gcs_to_bq_raw"
+        echo "PROCESS_DATE     : {{{{ dag_run.conf.get('process_date', ds_nodash) }}}}"
         echo "============================================================"
         """,
     )
@@ -856,6 +892,7 @@ with DAG(
 
     [
         environment_check,
+        admin_setup_start,
         create_pipeline_log_table,
         create_loader_audit_tables,
         create_dq_framework_tables,
@@ -864,6 +901,7 @@ with DAG(
         seed_customer_dq_thresholds,
         seed_product_dq_thresholds,
         seed_store_dq_thresholds,
+        admin_setup_completed,
         validate_gcs_files,
         load_gcs_to_bq_raw,
         dq_layer,

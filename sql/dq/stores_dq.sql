@@ -1,5 +1,12 @@
 DECLARE v_run_id STRING DEFAULT @pipeline_run_id;
 
+-- =====================================================
+-- stores_dq.sql
+-- Purpose:
+--   Validate store records, create quarantine snapshot,
+--   evaluate DQ rule thresholds, and create batch summary.
+-- =====================================================
+
 CREATE OR REPLACE TABLE
 `still-resource-497715-g5.retail_audit_records.stores_dq_results`
 AS
@@ -62,6 +69,10 @@ SELECT
 FROM ranked;
 
 
+-- =====================================================
+-- Failure summary display
+-- =====================================================
+
 SELECT
   reason,
   COUNT(*) AS failed_records
@@ -70,6 +81,11 @@ UNNEST(SPLIT(RTRIM(dq_reason, '|'), '|')) AS reason
 WHERE dq_reason != ''
 GROUP BY reason
 ORDER BY reason;
+
+
+-- =====================================================
+-- Store quarantine snapshot
+-- =====================================================
 
 TRUNCATE TABLE
 `still-resource-497715-g5.retail_quarantine_records.stores_quarantine`;
@@ -91,13 +107,17 @@ SELECT
   store_name,
   city,
   state,
-  RTRIM(dq_reason, '|'),
-  'retail_staging.stores_raw',
-  created_date_dt,
-  CURRENT_TIMESTAMP()
+  RTRIM(dq_reason, '|') AS quarantine_reason,
+  'retail_staging.stores_raw' AS source_table,
+  created_date_dt AS load_date,
+  CURRENT_TIMESTAMP() AS quarantined_at
 FROM `still-resource-497715-g5.retail_audit_records.stores_dq_results`
 WHERE dq_reason != '';
 
+
+-- =====================================================
+-- Store threshold-based rule results
+-- =====================================================
 
 DELETE FROM `still-resource-497715-g5.retail_audit_records.dq_rule_results`
 WHERE pipeline_run_id = v_run_id
@@ -122,7 +142,7 @@ INSERT INTO `still-resource-497715-g5.retail_audit_records.dq_rule_results`
 WITH totals AS (
   SELECT
     COUNT(*) AS total_records,
-    MAX(source_file_name) AS source_file_name
+    COALESCE(MAX(source_file_name), 'NO_FILE_FOR_RUN') AS source_file_name
   FROM `still-resource-497715-g5.retail_audit_records.stores_dq_results`
 ),
 
@@ -137,46 +157,67 @@ failures AS (
 )
 
 SELECT
-  v_run_id,
-  'stores',
+  v_run_id AS pipeline_run_id,
+  'stores' AS source_name,
   totals.source_file_name,
   threshold.rule_name,
   threshold.severity,
   totals.total_records,
-  COALESCE(failures.failed_records, 0),
+  COALESCE(failures.failed_records, 0) AS failed_records,
 
-  CAST(
-    ROUND(
-      SAFE_DIVIDE(
-        COALESCE(failures.failed_records, 0),
-        totals.total_records
-      ) * 100,
-      4
-    ) AS NUMERIC
-  ),
+  COALESCE(
+    CAST(
+      ROUND(
+        SAFE_DIVIDE(
+          COALESCE(failures.failed_records, 0),
+          NULLIF(totals.total_records, 0)
+        ) * 100,
+        4
+      ) AS NUMERIC
+    ),
+    0
+  ) AS failed_percentage,
 
   threshold.warning_percentage,
   threshold.failure_percentage,
   threshold.max_failed_records,
 
   CASE
+    WHEN totals.total_records = 0 THEN 'FAIL'
+
     WHEN COALESCE(failures.failed_records, 0) > threshold.max_failed_records
-      OR SAFE_DIVIDE(
-           COALESCE(failures.failed_records, 0),
-           totals.total_records
-         ) * 100 > threshold.failure_percentage
+      OR COALESCE(
+           CAST(
+             ROUND(
+               SAFE_DIVIDE(
+                 COALESCE(failures.failed_records, 0),
+                 NULLIF(totals.total_records, 0)
+               ) * 100,
+               4
+             ) AS NUMERIC
+           ),
+           0
+         ) > threshold.failure_percentage
       THEN 'FAIL'
 
-    WHEN SAFE_DIVIDE(
-           COALESCE(failures.failed_records, 0),
-           totals.total_records
-         ) * 100 > threshold.warning_percentage
+    WHEN COALESCE(
+           CAST(
+             ROUND(
+               SAFE_DIVIDE(
+                 COALESCE(failures.failed_records, 0),
+                 NULLIF(totals.total_records, 0)
+               ) * 100,
+               4
+             ) AS NUMERIC
+           ),
+           0
+         ) > threshold.warning_percentage
       THEN 'PASS_WITH_QUARANTINE'
 
     ELSE 'PASS'
-  END,
+  END AS dq_status,
 
-  CURRENT_TIMESTAMP()
+  CURRENT_TIMESTAMP() AS evaluated_at
 
 FROM `still-resource-497715-g5.retail_audit_records.dq_rule_thresholds`
   AS threshold
@@ -186,7 +227,11 @@ LEFT JOIN failures
 WHERE threshold.source_name = 'stores'
   AND threshold.active_flag = TRUE;
 
+
+-- =====================================================
 -- Store batch summary
+-- =====================================================
+
 DELETE FROM `still-resource-497715-g5.retail_audit_records.dq_batch_summary`
 WHERE pipeline_run_id = v_run_id
   AND source_name = 'stores';
@@ -208,12 +253,13 @@ INSERT INTO `still-resource-497715-g5.retail_audit_records.dq_batch_summary`
 )
 WITH batch_counts AS (
   SELECT
-    MAX(source_file_name) AS source_file_name,
+    COALESCE(MAX(source_file_name), 'NO_FILE_FOR_RUN') AS source_file_name,
     COUNT(*) AS total_records,
     COUNTIF(dq_reason = '') AS valid_records,
     COUNTIF(dq_reason != '') AS invalid_records
   FROM `still-resource-497715-g5.retail_audit_records.stores_dq_results`
 ),
+
 rule_counts AS (
   SELECT
     COUNTIF(dq_status = 'PASS') AS passed_rule_count,
@@ -223,32 +269,49 @@ rule_counts AS (
   WHERE pipeline_run_id = v_run_id
     AND source_name = 'stores'
 )
+
 SELECT
-  v_run_id,
-  'stores',
+  v_run_id AS pipeline_run_id,
+  'stores' AS source_name,
   batch.source_file_name,
   batch.total_records,
   batch.valid_records,
   batch.invalid_records,
-  CAST(
-    ROUND(
-      SAFE_DIVIDE(batch.invalid_records, batch.total_records) * 100,
-      4
-    ) AS NUMERIC
-  ),
+
+  COALESCE(
+    CAST(
+      ROUND(
+        SAFE_DIVIDE(
+          batch.invalid_records,
+          NULLIF(batch.total_records, 0)
+        ) * 100,
+        4
+      ) AS NUMERIC
+    ),
+    0
+  ) AS invalid_percentage,
+
   rules.passed_rule_count,
   rules.warning_rule_count,
   rules.failed_rule_count,
+
   CASE
+    WHEN batch.total_records = 0 THEN 'FAIL'
     WHEN rules.failed_rule_count > 0 THEN 'FAIL'
     WHEN rules.warning_rule_count > 0 THEN 'PASS_WITH_QUARANTINE'
     ELSE 'PASS'
-  END,
-  CURRENT_TIMESTAMP()
+  END AS batch_status,
+
+  CURRENT_TIMESTAMP() AS evaluated_at
+
 FROM batch_counts AS batch
 CROSS JOIN rule_counts AS rules;
 
+
+-- =====================================================
 -- Final verification
+-- =====================================================
+
 SELECT
   total_records,
   valid_records,
